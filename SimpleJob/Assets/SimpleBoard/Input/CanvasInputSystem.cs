@@ -4,54 +4,152 @@ using UnityEngine.EventSystems;
 
 namespace SimpleBoard.Input
 {
-    public class CanvasInputSyste:MonoBehaviour, IInputSystem
+    public class CanvasInputSystem : MonoBehaviour, IInputSystem
     {
+        [Header("Input Settings")]
         [SerializeField] private Camera _camera;
         [SerializeField] private EventTrigger _eventTrigger;
+        [SerializeField] private bool _useInputThrottling = true;
+        [SerializeField] private float _throttleInterval = 0.016f; // ~60fps
 
         public event EventHandler<PointerEventArgs> PointerDown;
         public event EventHandler<PointerEventArgs> PointerDrag;
         public event EventHandler<PointerEventArgs> PointerUp;
 
+        private float _lastDragTime;
+        private bool _isInitialized;
+
         private void Awake()
         {
-            var pointerDown = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
-            pointerDown.callback.AddListener(data => { OnPointerDown((PointerEventData) data); });
-
-            var pointerDrag = new EventTrigger.Entry { eventID = EventTriggerType.Drag };
-            pointerDrag.callback.AddListener(data => { OnPointerDrag((PointerEventData) data); });
-
-            var pointerUp = new EventTrigger.Entry { eventID = EventTriggerType.PointerUp };
-            pointerUp.callback.AddListener(data => { OnPointerUp((PointerEventData) data); });
-
-            _eventTrigger.triggers.Add(pointerDown);
-            _eventTrigger.triggers.Add(pointerDrag);
-            _eventTrigger.triggers.Add(pointerUp);
+            Initialize();
         }
 
-        private void OnPointerDown(PointerEventData e)
+        private void Initialize()
         {
-            PointerDown?.Invoke(this, GetPointerEventArgs(e));
+            if (_isInitialized)
+            {
+                return;
+            }
+
+            ValidateReferences();
+            SetupEventTriggers();
+            _isInitialized = true;
         }
 
-        private void OnPointerDrag(PointerEventData e)
+        private void ValidateReferences()
         {
-            PointerDrag?.Invoke(this, GetPointerEventArgs(e));
+            if (_camera == null)
+            {
+                _camera = Camera.main;
+                if (_camera == null)
+                {
+                    Debug.LogError($"[{nameof(CanvasInputSystem)}] No camera assigned and no main camera found!");
+                }
+            }
+
+            if (_eventTrigger == null)
+            {
+                _eventTrigger = GetComponent<EventTrigger>();
+                if (_eventTrigger == null)
+                {
+                    _eventTrigger = gameObject.AddComponent<EventTrigger>();
+                }
+            }
         }
 
-        private void OnPointerUp(PointerEventData e)
+        private void SetupEventTriggers()
         {
-            PointerUp?.Invoke(this, GetPointerEventArgs(e));
+            AddEventListener(EventTriggerType.PointerDown, OnPointerDown);
+            AddEventListener(EventTriggerType.Drag, OnPointerDrag);
+            AddEventListener(EventTriggerType.PointerUp, OnPointerUp);
         }
 
-        private PointerEventArgs GetPointerEventArgs(PointerEventData e)
+        private void AddEventListener(EventTriggerType eventType, Action<PointerEventData> action)
         {
-            return new PointerEventArgs(e.button, GetWorldPosition(e.position));
+            var entry = new EventTrigger.Entry { eventID = eventType };
+            entry.callback.AddListener(data => action?.Invoke((PointerEventData)data));
+            _eventTrigger.triggers.Add(entry);
         }
 
-        private Vector2 GetWorldPosition(Vector2 screenPosition)
+        private void OnPointerDown(PointerEventData eventData)
         {
+            if (eventData == null)
+            {
+                return;
+            }
+
+            TryRaiseEvent(PointerDown, eventData);
+        }
+
+        private void OnPointerDrag(PointerEventData eventData)
+        {
+            if (eventData == null)
+            {
+                return;
+            }
+
+            if (_useInputThrottling)
+            {
+                if (Time.time - _lastDragTime < _throttleInterval)
+                {
+                    return;
+                }
+                _lastDragTime = Time.time;
+            }
+
+            TryRaiseEvent(PointerDrag, eventData);
+        }
+
+        private void OnPointerUp(PointerEventData eventData)
+        {
+            if (eventData == null)
+            {
+                return;
+            }
+
+            TryRaiseEvent(PointerUp, eventData);
+        }
+
+        private void TryRaiseEvent(EventHandler<PointerEventArgs> eventHandler, PointerEventData eventData)
+        {
+            try
+            {
+                var eventArgs = CreatePointerEventArgs(eventData);
+                eventHandler?.Invoke(this, eventArgs);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[{nameof(CanvasInputSystem)}] Error raising event: {ex.Message}");
+            }
+        }
+
+        private PointerEventArgs CreatePointerEventArgs(PointerEventData eventData)
+        {
+            var worldPosition = ConvertToWorldPosition(eventData.position);
+            return new PointerEventArgs(eventData.button, worldPosition);
+        }
+
+        private Vector2 ConvertToWorldPosition(Vector2 screenPosition)
+        {
+            if (_camera == null)
+            {
+                return screenPosition;
+            }
+
             return _camera.ScreenToWorldPoint(screenPosition);
+        }
+
+        private void OnDestroy()
+        {
+            Cleanup();
+        }
+
+        private void Cleanup()
+        {
+            PointerDown = null;
+            PointerDrag = null;
+            PointerUp = null;
+            _isInitialized = false;
         }
     }
 }

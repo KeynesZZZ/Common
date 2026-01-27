@@ -5,7 +5,7 @@ using SimpleBoard.Interfaces;
 
 namespace SimpleBoard
 {
-    internal class GameBoard<TGridSlot> : IGameBoard<TGridSlot>, IDisposable where TGridSlot : IGridSlot
+    public class GameBoard<TGridSlot> : IGameBoard<TGridSlot>, IDisposable where TGridSlot : IGridSlot
     {
         private int _rowCount;
         private int _columnCount;
