@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
-namespace Job
+namespace SimpleJob.Runtime
 {
     public class JobsExecutor
     {

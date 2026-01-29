@@ -1,7 +1,7 @@
 ﻿using System.Threading;
 using Cysharp.Threading.Tasks;
 
-namespace Job
+namespace SimpleJob.Runtime
 {
     public abstract class Job : IJob
     {
