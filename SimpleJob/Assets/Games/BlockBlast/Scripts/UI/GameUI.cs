@@ -1,4 +1,5 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,9 +15,9 @@ namespace BlockBlast
         [SerializeField] private BlockTrayUI _blockTrayUI;
 
         [Header("分数显示")]
-        [SerializeField] private Text _scoreText;
-        [SerializeField] private Text _highScoreText;
-        [SerializeField] private Text _comboText;
+        [SerializeField] private TextMeshProUGUI _scoreText;
+        [SerializeField] private TextMeshProUGUI _highScoreText;
+        [SerializeField] private TextMeshProUGUI _comboText;
 
         [Header("控制按钮")]
         [SerializeField] private Button _startButton;
@@ -26,8 +27,8 @@ namespace BlockBlast
 
         [Header("游戏结束界面")]
         [SerializeField] private GameObject _gameOverPanel;
-        [SerializeField] private Text _finalScoreText;
-        [SerializeField] private Text _newRecordText;
+        [SerializeField] private TextMeshProUGUI _finalScoreText;
+        [SerializeField] private TextMeshProUGUI _newRecordText;
         [SerializeField] private Button _restartButton;
         [SerializeField] private Button _mainMenuButton;
 
@@ -169,7 +170,7 @@ namespace BlockBlast
             _gameOverPanel.SetActive(false);
             _isPaused = false;
             Time.timeScale = 1f;
-            _pauseButton.GetComponentInChildren<Text>().text = "暂停";
+            _pauseButton.GetComponentInChildren<TextMeshProUGUI>().text = "暂停";
         }
 
         /// <summary>

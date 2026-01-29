@@ -8,7 +8,7 @@ namespace BlockBlast
     /// <summary>
     /// 可拖拽方块组件
     /// </summary>
-    public class DraggableBlock : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+    public class DraggableBlock : MonoBehaviour
     {
         [Header("References")]
         [SerializeField] private RectTransform _rectTransform;
