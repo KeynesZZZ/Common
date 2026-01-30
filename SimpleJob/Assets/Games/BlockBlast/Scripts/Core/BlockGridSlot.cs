@@ -1,7 +1,9 @@
+using System;
 using System.Runtime.CompilerServices;
 using SimpleBoard;
 using SimpleBoard.Core;
 using SimpleBoard.Data;
+using SimpleBoard.Interfaces;
 using UnityEngine;
 
 namespace BlockBlast
@@ -10,7 +12,7 @@ namespace BlockBlast
     /// Block Blast 方块槽位实现
     /// 继承 UnityGridSlot 实现 IBlockGridSlot 接口
     /// </summary>
-    public class BlockGridSlot : UnityGridSlot, IBlockGridSlot
+    public class BlockGridSlot : IBlockGridSlot
     {
         private int _blockType;
         private Color _blockColor;
@@ -31,12 +33,58 @@ namespace BlockBlast
         public bool HasBlock => _blockType != 0;
 
         public BlockGridSlot(IGridSlotState state, GridPosition gridPosition) 
-            : base(state, gridPosition)
         {
             _blockType = 0;
             _blockColor = Color.clear;
+            State = state;
+            GridPosition = gridPosition;
         }
 
+        public long ItemId => Item.UniqueID;
+
+        public int ItemSn => Item.Sn;
+        public bool HasItem => Item != null;
+        public bool IsMovable => State.IsLocked == false && HasItem;
+        public bool CanContainItem => State.CanContainItem;
+        public bool CanSetItem => State.CanContainItem && HasItem == false;
+        public bool NotAvailable => State.CanContainItem == false || State.IsLocked;
+        public IUnityItem Item { get; private set; }
+        public IGridSlotState State { get; private set; }
+        public GridPosition GridPosition { get; }
+
+        public void SetState(IGridSlotState state)
+        {
+            State = state;
+        }
+
+        public void SetItem(IUnityItem item)
+        {
+            EnsureItemIsNotNull(item);
+
+            Item = item;
+        }
+
+        public void Clear()
+        {
+            if (State.CanContainItem == false)
+            {
+                throw new InvalidOperationException("Can not clear an unavailable grid slot.");
+            }
+            _blockType = 0;
+            _blockColor = Color.clear;
+            Item = default;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EnsureItemIsNotNull(IUnityItem item)
+        {
+            if (item == null)
+            {
+                throw new NullReferenceException(nameof(item));
+            }
+        }
+        
+        
         /// <summary>
         /// 设置方块
         /// </summary>
@@ -67,14 +115,6 @@ namespace BlockBlast
             _blockColor = Color.clear;
         }
 
-        /// <summary>
-        /// 清除槽位（包括方块数据）
-        /// </summary>
-        public new void Clear()
-        {
-            base.Clear();
-            _blockType = 0;
-            _blockColor = Color.clear;
-        }
+   
     }
 }
