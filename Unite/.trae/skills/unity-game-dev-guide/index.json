@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-01-30",
+  "totalQuestions": 0,
+  "categories": [
+    {
+      "id": "core",
+      "name": "核心系统",
+      "subcategories": [
+        {
+          "id": "input",
+          "name": "输入系统",
+          "count": 0
+        },
+        {
+          "id": "physics",
+          "name": "物理系统",
+          "count": 0
+        },
+        {
+          "id": "animation",
+          "name": "动画系统",
+          "count": 0
+        },
+        {
+          "id": "ui",
+          "name": "UI系统",
+          "count": 0
+        },
+        {
+          "id": "audio",
+          "name": "音频系统",
+          "count": 0
+        },
+        {
+          "id": "resources",
+          "name": "资源管理",
+          "count": 0
+        }
+      ],
+      "count": 0
+    },
+    {
+      "id": "network",
+      "name": "网络编程",
+      "subcategories": [
+        {
+          "id": "sync",
+          "name": "同步技术",
+          "count": 0
+        },
+        {
+          "id": "protocol",
+          "name": "网络协议",
+          "count": 0
+        }
+      ],
+      "count": 0
+    },
+    {
+      "id": "rendering",
+      "name": "渲染技术",
+      "subcategories": [
+        {
+          "id": "shaders",
+          "name": "着色器",
+          "count": 0
+        },
+        {
+          "id": "pipeline",
+          "name": "渲染管线",
+          "count": 0
+        }
+      ],
+      "count": 0
+    },
+    {
+      "id": "performance",
+      "name": "性能优化",
+      "count": 0
+    },
+    {
+      "id": "architecture",
+      "name": "架构设计",
+      "count": 0
+    },
+    {
+      "id": "tools",
+      "name": "工具链",
+      "count": 0
+    },
+    {
+      "id": "cross-platform",
+      "name": "跨平台开发",
+      "count": 0
+    }
+  ],
+  "difficultyLevels": [
+    {
+      "level": "基础",
+      "count": 0,
+      "description": "入门级概念，简单实现"
+    },
+    {
+      "level": "中级",
+      "count": 0,
+      "description": "需要一定经验，中等复杂度"
+    },
+    {
+      "level": "高级",
+      "count": 0,
+      "description": "专业知识，复杂实现"
+    }
+  ],
+  "questions": []
+}
