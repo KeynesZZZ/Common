@@ -33,8 +33,7 @@ namespace SimpleBoard
         public bool IsPositionOnGrid(GridPosition gridPosition)
         {
             EnsureGridSlotsIsNotNull();
-
-            return this.IsPositionOnGrid(gridPosition);
+            return GridMath.IsPositionOnGrid(this, gridPosition);
         }
 
         public bool IsPositionOnBoard(GridPosition gridPosition)

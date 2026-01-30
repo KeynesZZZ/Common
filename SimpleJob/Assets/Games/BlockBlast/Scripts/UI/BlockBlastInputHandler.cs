@@ -20,21 +20,6 @@ namespace BlockBlast
         private DraggableBlock _currentDraggingBlock;
         private bool _isDragging;
 
-        /// <summary>
-        /// 当方块开始拖拽时触发
-        /// </summary>
-        public event Action<DraggableBlock> OnBlockDragStarted;
-        
-        /// <summary>
-        /// 当方块拖拽中时触发
-        /// </summary>
-        public event Action<DraggableBlock, Vector2> OnBlockDragging;
-        
-        /// <summary>
-        /// 当方块结束拖拽时触发
-        /// </summary>
-        public event Action<DraggableBlock, Vector2, bool> OnBlockDragEnded;
-
         public void Initialize(BlockBlastGame game)
         {
             _game = game;
@@ -72,24 +57,13 @@ namespace BlockBlast
             if (_game.IsGameOver || _game.IsPaused)
                 return;
 
-            // 检测是否点击了可拖拽方块
             var draggableBlock = GetDraggableBlockAtPosition(e.WorldPosition);
             if (draggableBlock != null && !draggableBlock.IsPlaced)
             {
                 _currentDraggingBlock = draggableBlock;
                 _isDragging = true;
-                
-                // 开始拖拽
-                draggableBlock.OnBeginDrag(null);
-                
-                // 显示有效放置位置
-                if (_game.Config.ShowPlacementPreview)
-                {
-                    var validPositions = _game.GetValidPlacements(draggableBlock.BlockData);
-                    _gameBoardUI.HighlightValidPlacements(draggableBlock.BlockData, validPositions);
-                }
-                
-                OnBlockDragStarted?.Invoke(draggableBlock);
+               
+                draggableBlock.OnBeginDrag(e.WorldPosition);
             }
         }
 
@@ -101,10 +75,7 @@ namespace BlockBlast
             if (!_isDragging || _currentDraggingBlock == null)
                 return;
 
-            // 更新拖拽位置
-            _currentDraggingBlock.OnDrag(null);
-            
-            OnBlockDragging?.Invoke(_currentDraggingBlock, e.WorldPosition);
+            _currentDraggingBlock.OnDrag(e.WorldPosition);
         }
 
         /// <summary>
@@ -129,15 +100,13 @@ namespace BlockBlast
                 }
             }
 
-            // 结束拖拽
-            _currentDraggingBlock.OnEndDrag(null);
+         
+            _currentDraggingBlock.OnEndDrag(e.WorldPosition);
             
             if (!placed)
             {
                 _currentDraggingBlock.ResetBlock();
             }
-
-            OnBlockDragEnded?.Invoke(_currentDraggingBlock, e.WorldPosition, placed);
             _currentDraggingBlock = null;
         }
 
@@ -146,10 +115,46 @@ namespace BlockBlast
         /// </summary>
         private DraggableBlock GetDraggableBlockAtPosition(Vector2 worldPosition)
         {
+            // 将世界坐标转换为屏幕坐标
+            Vector2 screenPosition = Camera.main.WorldToScreenPoint(worldPosition);
+            
             // 使用射线检测获取点击的方块
             var pointerEventData = new PointerEventData(EventSystem.current)
             {
-                position = worldPosition
+                position = screenPosition
+            };
+
+            var raycastResults = new System.Collections.Generic.List<RaycastResult>();
+            EventSystem.current.RaycastAll(pointerEventData, raycastResults);
+
+            foreach (var result in raycastResults)
+            {
+                // 检查当前对象及其父对象是否有DraggableBlock组件
+                var draggableBlock = result.gameObject.GetComponent<DraggableBlock>();
+                if (draggableBlock != null)
+                {
+                    return draggableBlock;
+                }
+                
+                // 检查父对象
+                draggableBlock = result.gameObject.GetComponentInParent<DraggableBlock>();
+                if (draggableBlock != null)
+                {
+                    return draggableBlock;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 从屏幕坐标获取可拖拽方块（用于直接传入屏幕坐标的情况）
+        /// </summary>
+        public DraggableBlock GetDraggableBlockFromScreenPosition(Vector2 screenPosition)
+        {
+            var pointerEventData = new PointerEventData(EventSystem.current)
+            {
+                position = screenPosition
             };
 
             var raycastResults = new System.Collections.Generic.List<RaycastResult>();
@@ -158,6 +163,12 @@ namespace BlockBlast
             foreach (var result in raycastResults)
             {
                 var draggableBlock = result.gameObject.GetComponent<DraggableBlock>();
+                if (draggableBlock != null)
+                {
+                    return draggableBlock;
+                }
+                
+                draggableBlock = result.gameObject.GetComponentInParent<DraggableBlock>();
                 if (draggableBlock != null)
                 {
                     return draggableBlock;

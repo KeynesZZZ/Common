@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace SimpleBoard
 {
-    public class UnityGameBoardRenderer : MonoBehaviour, IUnityGameBoardRenderer, IGameBoardDataProvider<IBlockGridSlot>
+    public class BlockGameBoardRenderer : MonoBehaviour, IUnityGameBoardRenderer, IGameBoardDataProvider<IBlockGridSlot>
     {
         [Space] [SerializeField] private int _rowCount = 9;
         [SerializeField] private int _columnCount = 9;
@@ -38,7 +38,7 @@ namespace SimpleBoard
             _rowCount = data.GetLength(0);
             _columnCount = data.GetLength(1);
             _gridSlotTiles = new IGridTile[_rowCount, _columnCount];
-            _gameBoardSlots = new IUnityGridSlot[_rowCount, _columnCount];
+            _gameBoardSlots = new IBlockGridSlot[_rowCount, _columnCount];
             _originPosition = GetOriginPosition(_rowCount, _columnCount);
 
             CreateTiles(data);

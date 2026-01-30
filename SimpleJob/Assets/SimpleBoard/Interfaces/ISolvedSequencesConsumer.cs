@@ -1,7 +1,9 @@
-﻿namespace SimpleBoard.Interfaces
+﻿using SimpleBoard.Data;
+
+namespace SimpleBoard.Interfaces
 {
-    public interface ISolvedSequencesConsumer
+    public interface ISolvedSequencesConsumer<TGridSlot> where TGridSlot : IGridSlot
     {
-        
+        void OnSequencesSolved(SolvedData<TGridSlot> solvedData);
     }
 }

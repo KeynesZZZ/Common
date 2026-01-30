@@ -32,12 +32,12 @@ namespace BlockBlast
         /// <summary>
         /// 当拖拽结束时触发
         /// </summary>
-        public event Action<DraggableBlock, Vector2> OnDragEnded;
+        public event Action<DraggableBlock, Vector3> OnDragEnded;
         
         /// <summary>
         /// 当拖拽中触发
         /// </summary>
-        public event Action<DraggableBlock, Vector2> OnDragging;
+        public event Action<DraggableBlock, Vector3> OnDragging;
 
         private void Awake()
         {
@@ -105,7 +105,7 @@ namespace BlockBlast
                 // 计算位置
                 float x = (cell.ColumnIndex - minCol) * (cellSize + cellSpacing);
                 float y = -(cell.RowIndex - minRow) * (cellSize + cellSpacing);
-
+                cellRect.localPosition = Vector3.zero;
                 cellRect.anchoredPosition = new Vector2(x, y);
                 cellRect.sizeDelta = new Vector2(cellSize, cellSize);
 
@@ -139,7 +139,7 @@ namespace BlockBlast
             _canvasGroup.blocksRaycasts = true;
         }
 
-        public void OnBeginDrag(PointerEventData eventData)
+        public void OnBeginDrag(Vector3 worldPosition)
         {
             if (_isPlaced)
                 return;
@@ -156,16 +156,16 @@ namespace BlockBlast
             OnDragStarted?.Invoke(this);
         }
 
-        public void OnDrag(PointerEventData eventData)
+        public void OnDrag(Vector3 worldPosition)
         {
             if (!_isDragging)
                 return;
 
-            _rectTransform.position = eventData.position;
-            OnDragging?.Invoke(this, eventData.position);
+            _rectTransform.position = worldPosition;
+            OnDragging?.Invoke(this, worldPosition);
         }
 
-        public void OnEndDrag(PointerEventData eventData)
+        public void OnEndDrag(Vector3 worldPosition)
         {
             if (!_isDragging)
                 return;
@@ -174,7 +174,7 @@ namespace BlockBlast
             _canvasGroup.alpha = 1f;
             _canvasGroup.blocksRaycasts = true;
 
-            OnDragEnded?.Invoke(this, eventData.position);
+            OnDragEnded?.Invoke(this, worldPosition);
         }
     }
 }

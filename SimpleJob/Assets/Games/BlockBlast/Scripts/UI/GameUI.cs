@@ -1,4 +1,6 @@
 using System.Collections;
+using Cysharp.Threading.Tasks;
+using SimpleBoard;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,7 +15,7 @@ namespace BlockBlast
         [Header("游戏板")]
         [SerializeField] private GameBoardUI _gameBoardUI;
         [SerializeField] private BlockTrayUI _blockTrayUI;
-
+        [SerializeField] private BlockBlastInputHandler _inputHandler;
         [Header("分数显示")]
         [SerializeField] private TextMeshProUGUI _scoreText;
         [SerializeField] private TextMeshProUGUI _highScoreText;
@@ -51,16 +53,15 @@ namespace BlockBlast
         {
             if (_gameConfig == null)
                 _gameConfig = GameConfig.Default;
-
-            _game = new BlockBlastGame(_gameConfig);
+            BlockGameBoardRenderer blockGameBoardRenderer = this.GetComponent<BlockGameBoardRenderer>();
+            _game = new BlockBlastGame(_gameConfig,blockGameBoardRenderer);
             
             // 初始化UI组件
             _gameBoardUI.Initialize(_game);
             _blockTrayUI.Initialize(_game);
-
+            _inputHandler.Initialize(_game);
             // 订阅游戏事件
-            _game.OnGameStarted += OnGameStarted;
-            _game.OnGameOver += OnGameOver;
+    
             _game.ScoreManager.OnScoreChanged += OnScoreChanged;
             _game.ScoreManager.OnComboChanged += OnComboChanged;
             _game.ScoreManager.OnNewRecord += OnNewRecord;
@@ -91,7 +92,7 @@ namespace BlockBlast
         /// </summary>
         private void StartGame()
         {
-            _game.StartGame();
+            _game.StartAsync().Forget();
             _startButton.gameObject.SetActive(false);
             _pauseButton.gameObject.SetActive(true);
             _skipButton.gameObject.SetActive(true);
@@ -107,12 +108,12 @@ namespace BlockBlast
             
             if (_isPaused)
             {
-                _pauseButton.GetComponentInChildren<Text>().text = "继续";
+                _pauseButton.GetComponentInChildren<TextMeshProUGUI>().text = "继续";
                 Time.timeScale = 0f;
             }
             else
             {
-                _pauseButton.GetComponentInChildren<Text>().text = "暂停";
+                _pauseButton.GetComponentInChildren<TextMeshProUGUI>().text = "暂停";
                 Time.timeScale = 1f;
             }
         }
@@ -126,7 +127,7 @@ namespace BlockBlast
             _gameOverPanel.SetActive(false);
             _isPaused = false;
             Time.timeScale = 1f;
-            _pauseButton.GetComponentInChildren<Text>().text = "暂停";
+            _pauseButton.GetComponentInChildren<TextMeshProUGUI>().text = "暂停";
         }
 
         /// <summary>
@@ -146,7 +147,7 @@ namespace BlockBlast
             _game.ResetGame();
             _isPaused = false;
             Time.timeScale = 1f;
-            _pauseButton.GetComponentInChildren<Text>().text = "暂停";
+            _pauseButton.GetComponentInChildren<TextMeshProUGUI>().text = "暂停";
         }
 
         /// <summary>

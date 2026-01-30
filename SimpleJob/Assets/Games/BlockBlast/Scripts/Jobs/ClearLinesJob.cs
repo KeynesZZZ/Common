@@ -10,14 +10,14 @@ namespace BlockBlast
     /// </summary>
     public class ClearLinesJob : Job
     {
-        private readonly BlockGameBoard _board;
+        private readonly BlockBlastGame _blastGame;
         private readonly List<int> _rows;
         private readonly List<int> _cols;
 
-        public ClearLinesJob(BlockGameBoard board, List<int> rows, List<int> cols, int executionOrder)
+        public ClearLinesJob(BlockBlastGame blastGame, List<int> rows, List<int> cols, int executionOrder)
             : base(executionOrder)
         {
-            _board = board;
+            _blastGame = blastGame;
             _rows = rows;
             _cols = cols;
         }
@@ -26,7 +26,6 @@ namespace BlockBlast
         {
             // 消除逻辑已经在BlockGameBoard.PlaceBlock中处理
             // 这里可以添加消除动画等待
-            
             // await UniTask.Delay(300, cancellationToken: token);
             
             return UniTask.CompletedTask;

@@ -30,7 +30,7 @@ namespace BlockBlast
 
             // 订阅事件
             _game.OnAvailableBlocksUpdated += OnAvailableBlocksUpdated;
-            _game.OnGameStarted += OnGameStarted;
+            _game.OnGameStartedEvent += OnGameStarted;
         }
 
         private void OnDestroy()
@@ -38,7 +38,7 @@ namespace BlockBlast
             if (_game != null)
             {
                 _game.OnAvailableBlocksUpdated -= OnAvailableBlocksUpdated;
-                _game.OnGameStarted -= OnGameStarted;
+                _game.OnGameStartedEvent -= OnGameStarted;
             }
         }
 
@@ -125,7 +125,7 @@ namespace BlockBlast
         /// <summary>
         /// 方块拖拽中
         /// </summary>
-        private void OnBlockDragging(DraggableBlock block, Vector2 position)
+        private void OnBlockDragging(DraggableBlock block, Vector3 position)
         {
             // 可以在这里添加实时预览效果
         }
@@ -133,13 +133,13 @@ namespace BlockBlast
         /// <summary>
         /// 方块结束拖拽
         /// </summary>
-        private void OnBlockDragEnded(DraggableBlock block, Vector2 position)
+        private void OnBlockDragEnded(DraggableBlock block, Vector3 worldPosition)
         {
             _currentDraggingBlock = null;
             _gameBoardUI.ClearHighlights();
 
             // 尝试放置方块
-            if (_gameBoardUI.GetGridPositionFromPointer(position, out GridPosition gridPosition))
+            if (_gameBoardUI.GetGridPositionFromPointer(worldPosition, out GridPosition gridPosition))
             {
                 if (_game.PlaceBlock(block.BlockData, gridPosition))
                 {

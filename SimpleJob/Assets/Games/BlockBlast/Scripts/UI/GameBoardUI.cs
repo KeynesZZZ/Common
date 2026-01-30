@@ -33,7 +33,7 @@ namespace BlockBlast
             // 订阅事件
             _game.OnBlockPlaced += OnBlockPlaced;
             _game.OnLinesCleared += OnLinesCleared;
-            _game.OnGameStarted += OnGameStarted;
+            _game.OnGameStartedEvent += OnGameStarted;
         }
 
         private void OnDestroy()
@@ -42,7 +42,7 @@ namespace BlockBlast
             {
                 _game.OnBlockPlaced -= OnBlockPlaced;
                 _game.OnLinesCleared -= OnLinesCleared;
-                _game.OnGameStarted -= OnGameStarted;
+                _game.OnGameStartedEvent -= OnGameStarted;
             }
         }
 
@@ -97,9 +97,10 @@ namespace BlockBlast
         /// <summary>
         /// 获取鼠标位置对应的网格坐标
         /// </summary>
-        public bool GetGridPositionFromPointer(Vector2 pointerPosition, out GridPosition gridPosition)
+        public bool GetGridPositionFromPointer(Vector3 pointerPosition, out GridPosition gridPosition)
         {
             gridPosition = new GridPosition(0, 0);
+            Vector2 screenPosition = Camera.main.WorldToScreenPoint(pointerPosition);
             
             RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 _boardContainer, pointerPosition, null, out Vector2 localPoint);
