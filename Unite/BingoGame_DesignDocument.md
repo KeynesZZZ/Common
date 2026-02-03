@@ -18,6 +18,9 @@ Bingo是一款经典的数字匹配游戏，玩家需要在5x5的网格中标记
 - 流畅的动画效果
 - 异步操作优化
 - 模块化设计，易于扩展新功能
+- 多人在线对战
+- 服务器统一控制数字抽取
+- 实时同步游戏状态
 
 ---
 
@@ -36,19 +39,22 @@ BingoGame/
 │   ├── GameSystem/         # 游戏主系统
 │   ├── BoardSystem/        # 棋盘系统
 │   ├── NumberSystem/       # 数字系统
-│   └── WinConditionSystem/ # 胜利条件系统
+│   ├── WinConditionSystem/ # 胜利条件系统
+│   └── NetworkSystem/      # 网络系统
 ├── Services/                # 服务层
 │   ├── AudioService/       # 音频服务
 │   ├── AnimationService/   # 动画服务
 │   ├── DataService/        # 数据服务
-│   └── ConfigService/      # 配置服务
+│   ├── ConfigService/      # 配置服务
+│   └── NetworkService/     # 网络服务
 ├── Utilities/               # 工具类
 │   ├── Extensions/         # 扩展方法
 │   ├── Helpers/            # 辅助类
 │   └── Constants/          # 常量定义
 ├── Events/                  # 事件系统
 │   ├── GameEvents/         # 游戏事件
-│   └── UIEvents/           # UI事件
+│   ├── UIEvents/           # UI事件
+│   └── NetworkEvents/     # 网络事件
 └── Data/                    # 数据资源
     ├── ScriptableObjects/  # 可配置数据
     └── Resources/          # 资源文件
@@ -223,6 +229,638 @@ public class WinResult
     public List<IWinCondition> WinningConditions { get; set; }
     public List<Vector2Int> WinningCells { get; set; }
 }
+```
+
+### 3.5 网络系统设计
+
+#### 3.5.1 网络协议定义
+
+```csharp
+public enum MessageType
+{
+    None,
+    Connect,
+    Disconnect,
+    JoinRoom,
+    LeaveRoom,
+    RoomJoined,
+    RoomLeft,
+    GameStart,
+    GameEnd,
+    NumberCalled,
+    CellMarked,
+    PlayerWin,
+    PlayerListUpdate,
+    GameStateSync,
+    Error
+}
+
+[Serializable]
+public class NetworkMessage
+{
+    public MessageType type;
+    public string senderId;
+    public long timestamp;
+    public string data;
+}
+
+[Serializable]
+public class ConnectRequest
+{
+    public string playerId;
+    public string playerName;
+    public string roomCode;
+}
+
+[Serializable]
+public class RoomJoinedResponse
+{
+    public string roomId;
+    public string roomCode;
+    public List<PlayerInfo> players;
+    public bool isHost;
+}
+
+[Serializable]
+public class NumberCalledMessage
+{
+    public int number;
+    public int callIndex;
+}
+
+[Serializable]
+public class CellMarkedMessage
+{
+    public string playerId;
+    public int number;
+    public int row;
+    public int col;
+}
+
+[Serializable]
+public class PlayerWinMessage
+{
+    public string playerId;
+    public string playerName;
+    public List<string> winConditions;
+    public List<Vector2Int> winningCells;
+}
+
+[Serializable]
+public class PlayerInfo
+{
+    public string playerId;
+    public string playerName;
+    public bool isHost;
+    public bool isReady;
+    public int score;
+}
+
+[Serializable]
+public class GameStateSyncMessage
+{
+    public List<int> calledNumbers;
+    public int currentCallIndex;
+    public Dictionary<string, PlayerBoardState> playerBoards;
+}
+
+[Serializable]
+public class PlayerBoardState
+{
+    public string playerId;
+    public List<CellData> markedCells;
+}
+```
+
+#### 3.5.2 网络服务接口
+
+```csharp
+public interface INetworkService
+{
+    bool IsConnected { get; }
+    bool IsHost { get; }
+    string PlayerId { get; }
+    string RoomId { get; }
+    
+    UniTask ConnectAsync(string serverUrl);
+    UniTask DisconnectAsync();
+    UniTask JoinRoomAsync(string roomCode, string playerName);
+    UniTask LeaveRoomAsync();
+    UniTask SendMessageAsync(NetworkMessage message);
+    
+    event Action<NetworkMessage> OnMessageReceived;
+    event Action OnConnected;
+    event Action OnDisconnected;
+    event Action<string> OnError;
+}
+```
+
+#### 3.5.3 WebSocket网络服务实现
+
+```csharp
+public class WebSocketNetworkService : INetworkService
+{
+    private ClientWebSocket webSocket;
+    private string serverUrl;
+    private string playerId;
+    private string roomId;
+    private bool isHost;
+    private CancellationTokenSource cts;
+    
+    public bool IsConnected => webSocket?.State == WebSocketState.Open;
+    public bool IsHost => isHost;
+    public string PlayerId => playerId;
+    public string RoomId => roomId;
+    
+    public event Action<NetworkMessage> OnMessageReceived;
+    public event Action OnConnected;
+    public event Action OnDisconnected;
+    public event Action<string> OnError;
+    
+    public async UniTask ConnectAsync(string serverUrl)
+    {
+        this.serverUrl = serverUrl;
+        webSocket = new ClientWebSocket();
+        cts = new CancellationTokenSource();
+        
+        await webSocket.ConnectAsync(new Uri(serverUrl), cts.Token);
+        
+        playerId = GeneratePlayerId();
+        
+        OnConnected?.Invoke();
+        
+        _ = ReceiveMessagesAsync();
+    }
+    
+    public async UniTask JoinRoomAsync(string roomCode, string playerName)
+    {
+        var request = new ConnectRequest
+        {
+            playerId = playerId,
+            playerName = playerName,
+            roomCode = roomCode
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.JoinRoom,
+            senderId = playerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(request)
+        };
+        
+        await SendMessageAsync(message);
+    }
+    
+    public async UniTask SendMessageAsync(NetworkMessage message)
+    {
+        if (!IsConnected)
+        {
+            OnError?.Invoke("Not connected to server");
+            return;
+        }
+        
+        string json = JsonUtility.ToJson(message);
+        byte[] buffer = Encoding.UTF8.GetBytes(json);
+        
+        await webSocket.SendAsync(
+            new ArraySegment<byte>(buffer),
+            WebSocketMessageType.Text,
+            true,
+            cts.Token
+        );
+    }
+    
+    private async UniTaskVoid ReceiveMessagesAsync()
+    {
+        var buffer = new byte[4096];
+        
+        try
+        {
+            while (IsConnected && !cts.Token.IsCancellationRequested)
+            {
+                var result = await webSocket.ReceiveAsync(
+                    new ArraySegment<byte>(buffer),
+                    cts.Token
+                );
+                
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    await DisconnectAsync();
+                    return;
+                }
+                
+                string json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                var message = JsonUtility.FromJson<NetworkMessage>(json);
+                
+                HandleMessage(message);
+            }
+        }
+        catch (Exception ex)
+        {
+            OnError?.Invoke(ex.Message);
+        }
+    }
+    
+    private void HandleMessage(NetworkMessage message)
+    {
+        switch (message.type)
+        {
+            case MessageType.RoomJoined:
+                var roomData = JsonUtility.FromJson<RoomJoinedResponse>(message.data);
+                roomId = roomData.roomId;
+                isHost = roomData.isHost;
+                break;
+        }
+        
+        OnMessageReceived?.Invoke(message);
+    }
+    
+    public async UniTask DisconnectAsync()
+    {
+        if (webSocket?.State == WebSocketState.Open)
+        {
+            await webSocket.CloseAsync(
+                WebSocketCloseStatus.NormalClosure,
+                "Disconnecting",
+                CancellationToken.None
+            );
+        }
+        
+        cts?.Cancel();
+        webSocket?.Dispose();
+        
+        OnDisconnected?.Invoke();
+    }
+    
+    private string GeneratePlayerId()
+    {
+        return Guid.NewGuid().ToString("N");
+    }
+}
+```
+
+#### 3.5.4 网络管理器
+
+```csharp
+public class NetworkManager : MonoBehaviour
+{
+    private INetworkService networkService;
+    private Dictionary<MessageType, List<Action<NetworkMessage>>> messageHandlers;
+    
+    public bool IsConnected => networkService?.IsConnected ?? false;
+    public bool IsHost => networkService?.IsHost ?? false;
+    
+    private void Awake()
+    {
+        messageHandlers = new Dictionary<MessageType, List<Action<NetworkMessage>>>();
+        
+        networkService = new WebSocketNetworkService();
+        networkService.OnMessageReceived += HandleMessage;
+        networkService.OnConnected += OnConnected;
+        networkService.OnDisconnected += OnDisconnected;
+        networkService.OnError += OnError;
+    }
+    
+    public async UniTask ConnectAsync(string serverUrl)
+    {
+        await networkService.ConnectAsync(serverUrl);
+    }
+    
+    public async UniTask JoinRoomAsync(string roomCode, string playerName)
+    {
+        await networkService.JoinRoomAsync(roomCode, playerName);
+    }
+    
+    public void RegisterHandler(MessageType type, Action<NetworkMessage> handler)
+    {
+        if (!messageHandlers.ContainsKey(type))
+        {
+            messageHandlers[type] = new List<Action<NetworkMessage>>();
+        }
+        
+        messageHandlers[type].Add(handler);
+    }
+    
+    public void UnregisterHandler(MessageType type, Action<NetworkMessage> handler)
+    {
+        if (messageHandlers.ContainsKey(type))
+        {
+            messageHandlers[type].Remove(handler);
+        }
+    }
+    
+    private void HandleMessage(NetworkMessage message)
+    {
+        if (messageHandlers.TryGetValue(message.type, out var handlers))
+        {
+            foreach (var handler in handlers)
+            {
+                handler?.Invoke(message);
+            }
+        }
+    }
+    
+    public async UniTask SendNumberCalledAsync(int number, int callIndex)
+    {
+        var data = new NumberCalledMessage
+        {
+            number = number,
+            callIndex = callIndex
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.NumberCalled,
+            senderId = networkService.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await networkService.SendMessageAsync(message);
+    }
+    
+    public async UniTask SendCellMarkedAsync(int number, int row, int col)
+    {
+        var data = new CellMarkedMessage
+        {
+            playerId = networkService.PlayerId,
+            number = number,
+            row = row,
+            col = col
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.CellMarked,
+            senderId = networkService.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await networkService.SendMessageAsync(message);
+    }
+    
+    public async UniTask SendPlayerWinAsync(List<string> winConditions, List<Vector2Int> winningCells)
+    {
+        var data = new PlayerWinMessage
+        {
+            playerId = networkService.PlayerId,
+            winConditions = winConditions,
+            winningCells = winningCells
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.PlayerWin,
+            senderId = networkService.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await networkService.SendMessageAsync(message);
+    }
+    
+    private void OnConnected()
+    {
+        Debug.Log("Connected to server");
+        NetworkEvents.OnConnected?.Invoke();
+    }
+    
+    private void OnDisconnected()
+    {
+        Debug.Log("Disconnected from server");
+        NetworkEvents.OnDisconnected?.Invoke();
+    }
+    
+    private void OnError(string error)
+    {
+        Debug.LogError($"Network error: {error}");
+        NetworkEvents.OnError?.Invoke(error);
+    }
+    
+    private void OnDestroy()
+    {
+        networkService?.DisconnectAsync().Forget();
+    }
+}
+```
+
+#### 3.5.5 网络事件
+
+```csharp
+public static class NetworkEvents
+{
+    public static event Action OnConnected;
+    public static event Action OnDisconnected;
+    public static event Action<string> OnError;
+    public static event Action<RoomJoinedResponse> OnRoomJoined;
+    public static event Action<NumberCalledMessage> OnNumberCalled;
+    public static event Action<CellMarkedMessage> OnCellMarked;
+    public static event Action<PlayerWinMessage> OnPlayerWin;
+    public static event Action<List<PlayerInfo>> OnPlayerListUpdated;
+    public static event Action<GameStateSyncMessage> OnGameStateSynced;
+    
+    public static void NotifyConnected() => OnConnected?.Invoke();
+    public static void NotifyDisconnected() => OnDisconnected?.Invoke();
+    public static void NotifyError(string error) => OnError?.Invoke(error);
+    public static void NotifyRoomJoined(RoomJoinedResponse data) => OnRoomJoined?.Invoke(data);
+    public static void NotifyNumberCalled(NumberCalledMessage data) => OnNumberCalled?.Invoke(data);
+    public static void NotifyCellMarked(CellMarkedMessage data) => OnCellMarked?.Invoke(data);
+    public static void NotifyPlayerWin(PlayerWinMessage data) => OnPlayerWin?.Invoke(data);
+    public static void NotifyPlayerListUpdated(List<PlayerInfo> players) => OnPlayerListUpdated?.Invoke(players);
+    public static void NotifyGameStateSynced(GameStateSyncMessage data) => OnGameStateSynced?.Invoke(data);
+}
+```
+
+---
+
+## 4. 服务器端设计
+
+### 4.1 服务器架构
+
+```
+BingoServer/
+├── Core/                    # 核心系统
+│   ├── Models/             # 数据模型
+│   └── Controllers/       # 控制器
+├── Services/                # 服务层
+│   ├── RoomService/        # 房间服务
+│   ├── PlayerService/      # 玩家服务
+│   ├── GameService/        # 游戏服务
+│   └── WebSocketService/   # WebSocket服务
+├── Handlers/               # 消息处理器
+│   ├── ConnectionHandler/   # 连接处理
+│   ├── RoomHandler/        # 房间处理
+│   └── GameHandler/       # 游戏处理
+└── Utilities/               # 工具类
+    ├── Extensions/         # 扩展方法
+    └── Helpers/            # 辅助类
+```
+
+### 4.2 房间管理
+
+```csharp
+public class Room
+{
+    public string RoomId { get; set; }
+    public string RoomCode { get; set; }
+    public Dictionary<string, Player> Players { get; set; }
+    public GameState GameState { get; set; }
+    public Queue<int> NumberPool { get; set; }
+    public List<int> CalledNumbers { get; set; }
+    public string HostId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    
+    public bool IsFull => Players.Count >= MaxPlayers;
+    public bool IsGameStarted => GameState != GameState.None && GameState != GameState.Ready;
+    
+    public void AddPlayer(Player player);
+    public void RemovePlayer(string playerId);
+    public Player GetPlayer(string playerId);
+    public bool HasPlayer(string playerId);
+    public void StartGame();
+    public int CallNextNumber();
+    public void ResetGame();
+}
+
+public class RoomService
+{
+    private Dictionary<string, Room> rooms;
+    private Dictionary<string, string> roomCodeToId;
+    private int maxRooms = 100;
+    private int maxPlayersPerRoom = 10;
+    
+    public Room CreateRoom(string hostId, string hostName);
+    public Room JoinRoom(string roomCode, string playerId, string playerName);
+    public void LeaveRoom(string roomId, string playerId);
+    public Room GetRoom(string roomId);
+    public Room GetRoomByCode(string roomCode);
+    public void RemoveRoom(string roomId);
+    public List<Room> GetAllRooms();
+    public string GenerateRoomCode();
+}
+```
+
+### 4.3 游戏服务
+
+```csharp
+public class GameService
+{
+    private RoomService roomService;
+    private INumberGenerator numberGenerator;
+    
+    public async UniTask StartGameAsync(string roomId);
+    public async UniTask CallNumberAsync(string roomId);
+    public async UniTask MarkCellAsync(string roomId, string playerId, int number, int row, int col);
+    public async UniTask CheckWinAsync(string roomId, string playerId);
+    public async UniTask EndGameAsync(string roomId);
+    
+    private async UniTask BroadcastToRoomAsync(string roomId, NetworkMessage message);
+    private async UniTask SendToPlayerAsync(string playerId, NetworkMessage message);
+    private int[] GenerateBoardNumbers();
+}
+
+public class NumberGenerator
+{
+    private Random random;
+    
+    public int[] GenerateNumbers(int count, int min, int max);
+    public int[] ShuffleNumbers(int[] numbers);
+}
+```
+
+### 4.4 WebSocket服务器
+
+```csharp
+public class WebSocketServer
+{
+    private HttpListener httpListener;
+    private Dictionary<string, WebSocket> connections;
+    private Dictionary<string, string> connectionIdToPlayerId;
+    private CancellationTokenSource cts;
+    
+    public event Action<string, NetworkMessage> OnMessageReceived;
+    public event Action<string> OnConnected;
+    public event Action<string> OnDisconnected;
+    
+    public async UniTask StartAsync(string url);
+    public async UniTask StopAsync();
+    public async UniTask SendAsync(string playerId, NetworkMessage message);
+    public async UniTask BroadcastAsync(List<string> playerIds, NetworkMessage message);
+    
+    private async UniTask HandleConnectionAsync(WebSocket webSocket, string connectionId);
+    private async UniTask ReceiveMessagesAsync(WebSocket webSocket, string connectionId);
+    private string GenerateConnectionId();
+}
+
+public class WebSocketServerService
+{
+    private WebSocketServer server;
+    private RoomService roomService;
+    private GameService gameService;
+    private Dictionary<MessageType, Func<string, NetworkMessage, UniTask>> messageHandlers;
+    
+    public async UniTask StartAsync(string url);
+    public async UniTask StopAsync();
+    
+    private void RegisterHandlers();
+    private async UniTask HandleMessageAsync(string playerId, NetworkMessage message);
+    
+    private async UniTask HandleJoinRoomAsync(string playerId, NetworkMessage message);
+    private async UniTask HandleLeaveRoomAsync(string playerId, NetworkMessage message);
+    private async UniTask HandleStartGameAsync(string playerId, NetworkMessage message);
+    private async UniTask HandleCellMarkedAsync(string playerId, NetworkMessage message);
+    private async UniTask HandlePlayerWinAsync(string playerId, NetworkMessage message);
+}
+```
+
+### 4.5 消息处理流程
+
+```
+客户端发送消息
+    ↓
+WebSocketServer接收
+    ↓
+解析消息类型
+    ↓
+路由到对应处理器
+    ↓
+处理器执行业务逻辑
+    ↓
+更新游戏状态
+    ↓
+广播消息到房间内所有玩家
+    ↓
+客户端接收并更新UI
+```
+
+### 4.6 游戏流程（服务器端）
+
+```
+1. 玩家加入房间 (PlayerJoinRoom)
+   ↓
+2. 等待所有玩家准备 (WaitForAllPlayersReady)
+   ↓
+3. 房主点击开始游戏 (HostStartGame)
+   ↓
+4. 生成数字池 (GenerateNumberPool)
+   ↓
+5. 为每个玩家生成棋盘数字 (GenerateBoardNumbersForPlayers)
+   ↓
+6. 发送游戏开始消息 (SendGameStartMessage)
+   ↓
+7. 循环:
+   a. 从数字池中抽取数字 (DrawNumberFromPool)
+   b. 广播数字到所有玩家 (BroadcastNumber)
+   c. 等待玩家标记 (WaitForPlayerMark)
+   d. 检查玩家是否胜利 (CheckPlayerWin)
+   e. 如果有玩家胜利:
+      - 广播胜利消息 (BroadcastWinMessage)
+      - 结束游戏 (EndGame)
+   f. 如果数字池为空:
+      - 广播平局消息 (BroadcastDrawMessage)
+      - 结束游戏 (EndGame)
 ```
 
 ---
@@ -416,17 +1054,24 @@ public static class UIEvents
    - AnimationService
    - AudioService
    - DataService
+   - NetworkService
    ↓
 3. 初始化系统 (InitializeSystems)
    - BoardSystem
+
    - NumberSystem
    - WinConditionSystem
+   - NetworkSystem
    ↓
-4. 生成棋盘数字 (GenerateBoardNumbers)
+4. 连接服务器 (ConnectToServer)
    ↓
-5. 初始化UI (InitializeUI)
+5. 加入房间 (JoinRoom)
    ↓
-6. 切换到Ready状态 (ChangeState: Ready)
+6. 等待服务器发送棋盘数字 (WaitForBoardNumbers)
+   ↓
+7. 初始化UI (InitializeUI)
+   ↓
+8. 切换到Ready状态 (ChangeState: Ready)
 ```
 
 ### 6.2 游戏进行流程
@@ -434,16 +1079,23 @@ public static class UIEvents
 ```
 1. 玩家点击开始 (StartGame)
    ↓
-2. 切换到Playing状态 (ChangeState: Playing)
+2. 发送开始游戏请求到服务器 (SendStartGameRequest)
    ↓
-3. 循环:
-   a. 系统随机抽取数字 (CallNumber)
+3. 等待服务器开始游戏 (WaitForGameStart)
+   ↓
+4. 切换到Playing状态 (ChangeState: Playing)
+   ↓
+5. 循环 (由服务器控制):
+   a. 服务器下发数字 (ReceiveNumberFromServer)
    b. 播放数字动画 (PlayNumberAnimation)
-   c. 玩家标记对应格子 (MarkCell)
-   d. 播放标记动画 (PlayMarkAnimation)
-   e. 检查胜利条件 (CheckWin)
-   f. 如果胜利 → 切换到Win状态
-   g. 如果所有数字被抽取 → 切换到Lose状态
+   c. 玩家点击对应格子 (PlayerClickCell)
+   d. 发送标记请求到服务器 (SendMarkRequest)
+   e. 服务器广播标记结果 (BroadcastMarkResult)
+   f. 播放标记动画 (PlayMarkAnimation)
+   g. 检查胜利条件 (CheckWin)
+   h. 如果胜利 → 发送胜利消息到服务器 (SendWinMessage)
+   i. 服务器广播胜利结果 (BroadcastWinResult)
+   j. 切换到Win状态 (ChangeState: Win)
 ```
 
 ### 6.3 胜利检查流程
@@ -860,7 +1512,8 @@ public async UniTask TestGameFlow_CompleteGame()
   "dependencies": {
     "com.cysharp.unitask": "2.5.0",
     "com.demigiant.dotween": "1.3.0",
-    "com.unity.textmeshpro": "3.0.6"
+    "com.unity.textmeshpro": "3.0.6",
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }
 ```
@@ -884,31 +1537,43 @@ public async UniTask TestGameFlow_CompleteGame()
 - [ ] 实现服务容器
 - [ ] 集成UniTask和DOTween
 
-### Phase 2: 游戏系统 (Week 3-4)
+### Phase 2: 网络系统 (Week 3-4)
+- [ ] 实现网络协议定义
+- [ ] 实现WebSocket网络服务
+- [ ] 实现网络管理器
+- [ ] 实现网络事件系统
+- [ ] 实现断线重连机制
+
+### Phase 3: 游戏系统 (Week 5-6)
 - [ ] 实现棋盘系统
 - [ ] 实现数字系统
 - [ ] 实现胜利条件系统
 - [ ] 实现游戏控制器
+- [ ] 集成网络同步
 
-### Phase 3: UI系统 (Week 5-6)
+### Phase 4: UI系统 (Week 7-8)
 - [ ] 实现主菜单
+- [ ] 实现房间列表UI
 - [ ] 实现游戏UI
 - [ ] 实现结果界面
 - [ ] 实现暂停菜单
+- [ ] 实现玩家列表UI
 
-### Phase 4: 动画和音效 (Week 7)
+### Phase 5: 动画和音效 (Week 9)
 - [ ] 实现动画服务
 - [ ] 实现音频服务
 - [ ] 添加游戏音效
 - [ ] 添加背景音乐
 
-### Phase 5: 优化和测试 (Week 8)
+### Phase 6: 优化和测试 (Week 10)
 - [ ] 性能优化
+- [ ] 网络优化
 - [ ] 单元测试
 - [ ] 集成测试
+- [ ] 网络测试
 - [ ] Bug修复
 
-### Phase 6: 打包和发布 (Week 9)
+### Phase 7: 打包和发布 (Week 11)
 - [ ] 多平台构建
 - [ ] 应用商店准备
 - [ ] 文档完善
@@ -918,7 +1583,7 @@ public async UniTask TestGameFlow_CompleteGame()
 
 ## 14. 总结
 
-本设计文档提供了一个可扩展、高性能的Unity Bingo游戏架构，具有以下特点：
+本设计文档提供了一个可扩展、高性能的Unity多人在线Bingo游戏架构，具有以下特点：
 
 1. **模块化设计**: 各系统独立，易于维护和扩展
 2. **异步优化**: 使用UniTask优化异步操作
@@ -927,5 +1592,10 @@ public async UniTask TestGameFlow_CompleteGame()
 5. **事件驱动**: 解耦模块间通信
 6. **数据持久化**: 支持游戏进度保存
 7. **跨平台**: 支持多平台部署
+8. **多人在线**: 支持实时多人对战
+9. **服务器控制**: 数字由服务器统一下发，确保公平性
+10. **实时同步**: 游戏状态实时同步到所有玩家
+11. **WebSocket通信**: 使用WebSocket实现高效的双向通信
+12. **断线重连**: 支持网络断线后的自动重连
 
-该架构为后续功能扩展提供了良好的基础，开发者可以轻松添加新的胜利条件、动画效果和游戏模式。
+该架构为后续功能扩展提供了良好的基础，开发者可以轻松添加新的胜利条件、动画效果和游戏模式。网络系统设计支持多种网络协议，可根据需求切换不同的网络实现。
