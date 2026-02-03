@@ -3,7 +3,11 @@
 ## 1. 项目概述
 
 ### 1.1 游戏简介
-Bingo是一款经典的数字匹配游戏，玩家需要在5x5的网格中标记随机生成的数字，当达成特定连线模式时获胜。
+Bingo是一款经典的数字匹配游戏，支持多种玩法模式：
+
+**常规数字Bingo**：玩家需要在5x5的网格中标记随机生成的数字，当达成特定连线模式时获胜。
+
+**割草Bingo**：玩家需要在5x5的网格中收割草丛，通过收集道具来加速割草进度，当所有格子都被收割时获胜。
 
 ### 1.2 技术栈
 - **Unity版本**: 2022.3 LTS 或更高
@@ -21,6 +25,8 @@ Bingo是一款经典的数字匹配游戏，玩家需要在5x5的网格中标记
 - 多人在线对战
 - 服务器统一控制数字抽取
 - 实时同步游戏状态
+- 道具系统：支持多种游戏道具增强玩法
+- 移动端优化：针对移动设备的触控优化
 
 ---
 
@@ -40,13 +46,15 @@ BingoGame/
 │   ├── BoardSystem/        # 棋盘系统
 │   ├── NumberSystem/       # 数字系统
 │   ├── WinConditionSystem/ # 胜利条件系统
-│   └── NetworkSystem/      # 网络系统
+│   ├── NetworkSystem/      # 网络系统
+│   └── ItemSystem/        # 道具系统
 ├── Services/                # 服务层
 │   ├── AudioService/       # 音频服务
 │   ├── AnimationService/   # 动画服务
 │   ├── DataService/        # 数据服务
 │   ├── ConfigService/      # 配置服务
-│   └── NetworkService/     # 网络服务
+│   ├── NetworkService/     # 网络服务
+│   └── ItemService/       # 道具服务
 ├── Utilities/               # 工具类
 │   ├── Extensions/         # 扩展方法
 │   ├── Helpers/            # 辅助类
@@ -71,6 +79,8 @@ BingoGame/
 | 策略模式 | 胜利条件 | 可扩展的胜利规则 |
 | 工厂模式 | 数字生成 | 灵活创建数字对象 |
 | 依赖注入 | 服务注入 | 降低耦合度 |
+| 模板方法模式 | 玩法系统 | 定义玩法框架，子类实现具体逻辑 |
+| 抽象工厂模式 | 玩法创建 | 根据玩法类型创建对应实例 |
 
 ---
 
@@ -144,7 +154,266 @@ public class BingoBoardViewModel
 }
 ```
 
-### 3.3 数字系统
+### 3.3 割草Bingo系统
+
+#### 3.3.1 割草Bingo数据模型
+
+```csharp
+public enum GrassColor
+{
+    Red,
+    Blue,
+    Green,
+    Yellow,
+    Purple
+}
+
+public class GrassCell
+{
+    public GrassColor Color { get; set; }
+    public bool IsHarvested { get; set; }
+    public Vector2Int Position { get; set; }
+    public float GrowthProgress { get; set; }
+    public bool HasCar { get; set; }
+    public bool HasKey { get; set; }
+}
+
+public class HarvestBoard
+{
+    public const int BoardSize = 5;
+    private GrassCell[,] cells;
+    private Dictionary<GrassColor, int> carCounts;
+    private Dictionary<GrassColor, int> keyCounts;
+    
+    public GrassCell GetCell(int row, int col);
+    public void HarvestCell(int row, int col);
+    public bool IsCellHarvested(int row, int col);
+    public GrassCell[,] GetAllCells();
+    public void Reset();
+    public bool IsAllHarvested();
+    public void AddCar(GrassColor color);
+    public void AddKey(GrassColor color);
+    public bool HasCar(GrassColor color);
+    public bool HasKey(GrassColor color);
+    public int GetCarCount(GrassColor color);
+    public int GetKeyCount(GrassColor color);
+}
+```
+
+#### 3.3.2 割草Bingo视图模型
+
+```csharp
+public class HarvestBoardViewModel
+{
+    private HarvestBoard model;
+    private IHarvestBoardView view;
+    
+    public UniTask InitializeAsync();
+    public UniTask HarvestCellAsync(int row, int col);
+    public UniTask PlayHarvestAnimationAsync(int row, int col);
+    public UniTask PlayCarRefuelAnimationAsync(GrassColor color);
+    public UniTask PlayColumnHarvestAnimationAsync(int col);
+    public UniTask ResetBoardAsync();
+}
+```
+
+#### 3.3.3 割草Bingo道具系统
+
+```csharp
+public enum HarvestItemType
+{
+    Gasoline,           // 汽油：给对应颜色的小车加油
+    Key,               // 钥匙：直接收割对应颜色的整列
+    SpeedBoost,          // 加速：加快割草动画速度
+    DoubleReward,        // 双倍奖励：获得双倍分数
+    AutoHarvest,         // 自动收割：自动收割一个格子
+    MysteryBox          // 神秘箱：随机获得道具
+}
+
+[Serializable]
+public class HarvestItemData
+{
+    public string itemId;
+    public string itemName;
+    public string description;
+    public HarvestItemType itemType;
+    public GrassColor? targetColor;
+    public Sprite icon;
+    public int cost;
+    public int maxStack;
+    public float cooldown;
+    public bool isConsumable;
+}
+
+[Serializable]
+public class HarvestInventoryItem
+{
+    public string itemId;
+    public int count;
+    public DateTime lastUsedTime;
+}
+
+public class HarvestItemService
+{
+    private Dictionary<string, HarvestItemData> itemConfigs;
+    private Dictionary<string, HarvestInventoryItem> inventory;
+    
+    public async UniTask InitializeAsync();
+    public async UniTask<bool> UseItemAsync(string itemId);
+    public async UniTask<bool> AddItemAsync(string itemId, int count);
+    public HarvestItemData GetItem(string itemId);
+    public int GetItemCount(string itemId);
+    
+    private async UniTask HandleGasolineAsync(string itemId)
+    {
+        var itemData = GetItem(itemId);
+        
+        if (itemData.itemType == HarvestItemType.Gasoline && itemData.targetColor.HasValue)
+        {
+            var color = itemData.targetColor.Value;
+            await HarvestBoard.Instance.AddCarAsync(color);
+            await AnimationService.Instance.PlayCarRefuelAnimationAsync(color);
+        }
+    }
+    
+    private async UniTask HandleKeyAsync(string itemId)
+    {
+        var itemData = GetItem(itemId);
+        
+        if (itemData.itemType == HarvestItemType.Key && itemData.targetColor.HasValue)
+        {
+            var color = itemData.targetColor.Value;
+            await HarvestBoard.Instance.AddKeyAsync(color);
+            
+            var board = HarvestBoard.Instance;
+            for (int row = 0; row < HarvestBoard.BoardSize; row++)
+            {
+                var cell = board.GetCell(row, 0);
+                if (cell.Color == color && !cell.IsHarvested)
+                {
+                    await HarvestBoard.Instance.HarvestColumnAsync(0);
+                    break;
+                }
+            }
+        }
+    }
+    
+    private async UniTask HandleAutoHarvestAsync(string itemId)
+    {
+        var board = HarvestBoard.Instance;
+        var unharvestedCells = board.GetAllCells()
+            .Where(c => !c.IsHarvested)
+            .ToList();
+        
+        if (unharvestedCells.Count > 0)
+        {
+            var randomCell = unharvestedCells[Random.Range(0, unharvestedCells.Count)];
+            await HarvestBoard.Instance.HarvestCellAsync(randomCell.Position.x, randomCell.Position.y);
+        }
+    }
+}
+```
+
+#### 3.3.4 割草Bingo网络同步
+
+```csharp
+[Serializable]
+public class CellHarvestedMessage
+{
+    public string playerId;
+    public int row;
+    public int col;
+    public GrassColor color;
+}
+
+[Serializable]
+public class CarRefueledMessage
+{
+    public string playerId;
+    public GrassColor color;
+}
+
+[Serializable]
+public class ColumnHarvestedMessage
+{
+    public string playerId;
+    public int col;
+    public GrassColor color;
+}
+
+[Serializable]
+public class ItemObtainedMessage
+{
+    public string playerId;
+    public string itemId;
+    public int count;
+}
+
+public class HarvestNetworkService
+{
+    public async UniTask SendCellHarvestedAsync(int row, int col, GrassColor color)
+    {
+        var data = new CellHarvestedMessage
+        {
+            playerId = NetworkManager.Instance.PlayerId,
+            row = row,
+            col = col,
+            color = color
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.CellHarvested,
+            senderId = NetworkManager.Instance.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await NetworkManager.Instance.SendMessageAsync(message);
+    }
+    
+    public async UniTask SendCarRefueledAsync(GrassColor color)
+    {
+        var data = new CarRefueledMessage
+        {
+            playerId = NetworkManager.Instance.PlayerId,
+            color = color
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.CarRefueled,
+            senderId = NetworkManager.Instance.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await NetworkManager.Instance.SendMessageAsync(message);
+    }
+    
+    public async UniTask SendColumnHarvestedAsync(int col, GrassColor color)
+    {
+        var data = new ColumnHarvestedMessage
+        {
+            playerId = NetworkManager.Instance.PlayerId,
+            col = col,
+            color = color
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.ColumnHarvested,
+            senderId = NetworkManager.Instance.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await NetworkManager.Instance.SendMessageAsync(message);
+    }
+}
+```
+
+### 3.4 数字系统
 
 ```csharp
 public interface INumberGenerator
@@ -231,9 +500,457 @@ public class WinResult
 }
 ```
 
-### 3.5 网络系统设计
+### 3.5 道具系统设计
 
-#### 3.5.1 网络协议定义
+#### 3.5.1 道具类型定义
+
+```csharp
+public enum ItemType
+{
+    None,
+    InstantBingo,          // 即时Bingo：自动标记一个数字
+    DoublePoints,          // 双倍积分：获得双倍分数
+    ExtraTime,            // 额外时间：延长游戏时间
+    FreeDaub,            // 免费标记：免费标记一个格子
+    TreasureChest,        // 宝箱：随机获得奖励
+    CoinBoost,            // 金币加成：增加金币获取
+    MagicDaub,           // 魔法标记：标记时触发特效
+    LuckyNumber,          // 幸运数字：指定数字更容易出现
+    Shield,               // 护盾：防止负面效果
+    SpeedUp               // 加速：加快数字抽取速度
+}
+
+public enum ItemRarity
+{
+    Common,
+    Rare,
+    Epic,
+    Legendary
+}
+
+public enum ItemTarget
+{
+    Self,              // 只对自己生效
+    AllPlayers,        // 对所有玩家生效
+    RandomPlayer,       // 对随机玩家生效
+    Opponents          // 对对手生效
+}
+```
+
+#### 3.5.2 道具数据模型
+
+```csharp
+[Serializable]
+public class ItemData
+{
+    public string itemId;
+    public string itemName;
+    public string description;
+    public ItemType itemType;
+    public ItemRarity rarity;
+    public Sprite icon;
+    public int cost;
+    public int maxStack;
+    public float cooldown;
+    public float duration;
+    public ItemTarget target;
+    public bool isConsumable;
+    public bool isActiveInGame;
+}
+
+[Serializable]
+public class InventoryItem
+{
+    public string itemId;
+    public int count;
+    public DateTime lastUsedTime;
+}
+
+[Serializable]
+public class ActiveItemEffect
+{
+    public string itemId;
+    public string playerId;
+    public float startTime;
+    public float duration;
+    public Dictionary<string, object> parameters;
+}
+```
+
+#### 3.5.3 道具配置
+
+```csharp
+[CreateAssetMenu(fileName = "ItemConfig", menuName = "Bingo/Item Config")]
+public class ItemConfig : ScriptableObject
+{
+    public List<ItemData> items;
+    
+    public ItemData GetItem(string itemId);
+    public List<ItemData> GetItemsByType(ItemType type);
+    public List<ItemData> GetItemsByRarity(ItemRarity rarity);
+}
+```
+
+#### 3.5.4 道具服务
+
+```csharp
+public interface IItemService
+{
+    UniTask InitializeAsync();
+    UniTask<InventoryItem[]> GetInventoryAsync();
+    UniTask<bool> UseItemAsync(string itemId);
+    UniTask<bool> AddItemAsync(string itemId, int count);
+    UniTask RemoveItemAsync(string itemId, int count);
+    UniTask<List<ActiveItemEffect>> GetActiveEffectsAsync();
+    UniTask ActivateEffectAsync(string itemId, string playerId);
+    UniTask DeactivateEffectAsync(string effectId);
+}
+
+public class ItemService : IItemService
+{
+    private ItemConfig config;
+    private Dictionary<string, InventoryItem> inventory;
+    private List<ActiveItemEffect> activeEffects;
+    private Dictionary<ItemType, Func<string, UniTask>> itemHandlers;
+    
+    public async UniTask InitializeAsync()
+    {
+        config = Resources.Load<ItemConfig>("ItemConfig");
+        inventory = new Dictionary<string, InventoryItem>();
+        activeEffects = new List<ActiveItemEffect>();
+        
+        RegisterItemHandlers();
+        await LoadInventoryAsync();
+    }
+    
+    private void RegisterItemHandlers()
+    {
+        itemHandlers = new Dictionary<ItemType, Func<string, UniTask>>
+        {
+            { ItemType.InstantBingo, HandleInstantBingo },
+            { ItemType.DoublePoints, HandleDoublePoints },
+            { ItemType.ExtraTime, HandleExtraTime },
+            { ItemType.FreeDaub, HandleFreeDaub },
+            { ItemType.TreasureChest, HandleTreasureChest },
+            { ItemType.CoinBoost, HandleCoinBoost },
+            { ItemType.MagicDaub, HandleMagicDaub },
+            { ItemType.LuckyNumber, HandleLuckyNumber },
+            { ItemType.Shield, HandleShield },
+            { ItemType.SpeedUp, HandleSpeedUp }
+        };
+    }
+    
+    public async UniTask<bool> UseItemAsync(string itemId)
+    {
+        var itemData = config.GetItem(itemId);
+        
+        if (itemData == null)
+            return false;
+        
+        if (!inventory.ContainsKey(itemId) || inventory[itemId].count <= 0)
+            return false;
+        
+        if (itemData.cooldown > 0)
+        {
+            var lastUsed = inventory[itemId].lastUsedTime;
+            var cooldownRemaining = (DateTime.Now - lastUsed).TotalSeconds;
+            
+            if (cooldownRemaining < itemData.cooldown)
+                return false;
+        }
+        
+        inventory[itemId].count--;
+        inventory[itemId].lastUsedTime = DateTime.Now;
+        
+        await ActivateEffectAsync(itemId, NetworkManager.Instance.PlayerId);
+        
+        await SaveInventoryAsync();
+        
+        return true;
+    }
+    
+    public async UniTask ActivateEffectAsync(string itemId, string playerId)
+    {
+        var itemData = config.GetItem(itemId);
+        
+        if (itemHandlers.TryGetValue(itemData.itemType, out var handler))
+        {
+            await handler.Invoke(playerId);
+        }
+        
+        if (itemData.duration > 0)
+        {
+            var effect = new ActiveItemEffect
+            {
+                itemId = itemId,
+                playerId = playerId,
+                startTime = Time.time,
+                duration = itemData.duration
+            };
+            
+            activeEffects.Add(effect);
+            
+            await UniTask.Delay(TimeSpan.FromSeconds(itemData.duration));
+            
+            await DeactivateEffectAsync(effect.itemId);
+        }
+    }
+    
+    private async UniTask HandleInstantBingo(string playerId)
+    {
+        var board = BoardSystem.Instance.GetBoard();
+        var unmarkedCells = board.GetAllCells()
+            .Where(c => !c.IsMarked && !c.IsFreeSpace)
+            .ToList();
+        
+        if (unmarkedCells.Count > 0)
+        {
+            var randomCell = unmarkedCells[Random.Range(0, unmarkedCells.Count)];
+            await BoardSystem.Instance.MarkCellAsync(randomCell.Position.x, randomCell.Position.y);
+        }
+    }
+    
+    private async UniTask HandleDoublePoints(string playerId)
+    {
+        var effect = new ActiveItemEffect
+        {
+            itemId = "double_points",
+            playerId = playerId,
+            startTime = Time.time,
+            duration = 30f,
+            parameters = new Dictionary<string, object>
+            {
+                { "multiplier", 2f }
+            }
+        };
+        
+        activeEffects.Add(effect);
+        GameEvents.OnItemEffectActivated?.Invoke(effect);
+    }
+    
+    private async UniTask HandleFreeDaub(string playerId)
+    {
+        GameEvents.OnFreeDaubActivated?.Invoke(playerId);
+    }
+    
+    private async UniTask HandleTreasureChest(string playerId)
+    {
+        var rewards = new List<string> { "coins", "gems", "items" };
+        var reward = rewards[Random.Range(0, rewards.Count)];
+        
+        GameData.Instance.AddReward(reward, Random.Range(1, 10));
+        GameEvents.OnTreasureOpened?.Invoke(playerId, reward);
+    }
+    
+    private async UniTask HandleMagicDaub(string playerId)
+    {
+        GameEvents.OnMagicDaubActivated?.Invoke(playerId);
+    }
+    
+    private async UniTask HandleLuckyNumber(string playerId)
+    {
+        var luckyNumber = Random.Range(1, 76);
+        GameEvents.OnLuckyNumberSet?.Invoke(playerId, luckyNumber);
+    }
+    
+    private async UniTask HandleShield(string playerId)
+    {
+        var effect = new ActiveItemEffect
+        {
+            itemId = "shield",
+            playerId = playerId,
+            startTime = Time.time,
+            duration = 60f
+        };
+        
+        activeEffects.Add(effect);
+        GameEvents.OnShieldActivated?.Invoke(playerId);
+    }
+    
+    private async UniTask HandleSpeedUp(string playerId)
+    {
+        if (NetworkManager.Instance.IsHost)
+        {
+            GameEvents.OnSpeedUpRequested?.Invoke();
+        }
+    }
+    
+    public float GetScoreMultiplier(string playerId)
+    {
+        var effects = activeEffects
+            .Where(e => e.playerId == playerId && e.itemId == "double_points")
+            .ToList();
+        
+        return effects.Count > 0 ? 2f : 1f;
+    }
+    
+    public bool HasShield(string playerId)
+    {
+        return activeEffects.Any(e => 
+            e.playerId == playerId && e.itemId == "shield");
+    }
+}
+```
+
+#### 3.5.5 道具UI
+
+```csharp
+public class ItemSlotView : MonoBehaviour
+{
+    [SerializeField] private Image itemIcon;
+    [SerializeField] private TextMeshProUGUI itemCount;
+    [SerializeField] private Button useButton;
+    [SerializeField] private Image cooldownOverlay;
+    
+    private string itemId;
+    private ItemData itemData;
+    
+    public void Initialize(string itemId, ItemData data)
+    {
+        this.itemId = itemId;
+        this.itemData = data;
+        
+        itemIcon.sprite = data.icon;
+        UpdateCount();
+        
+        useButton.onClick.AddListener(OnUseButtonClicked);
+    }
+    
+    public void UpdateCount()
+    {
+        var inventory = ItemService.Instance.GetInventoryAsync().GetAwaiter().GetResult();
+        var item = inventory.FirstOrDefault(i => i.itemId == itemId);
+        
+        if (item != null)
+        {
+            itemCount.text = item.count.ToString();
+            useButton.interactable = item.count > 0;
+        }
+        else
+        {
+            itemCount.text = "0";
+            useButton.interactable = false;
+        }
+    }
+    
+    private async void OnUseButtonClicked()
+    {
+        var success = await ItemService.Instance.UseItemAsync(itemId);
+        
+        if (success)
+        {
+            UpdateCount();
+            await AnimationService.Instance.PlayItemUseAnimationAsync(transform);
+        }
+    }
+}
+
+public class ItemBarView : MonoBehaviour
+{
+    [SerializeField] private Transform itemSlotsContainer;
+    [SerializeField] private GameObject itemSlotPrefab;
+    
+    private List<ItemSlotView> itemSlots;
+    
+    private void Start()
+    {
+        itemSlots = new List<ItemSlotView>();
+        InitializeItemSlots();
+    }
+    
+    private void InitializeItemSlots()
+    {
+        var config = Resources.Load<ItemConfig>("ItemConfig");
+        var items = config.items.Where(i => i.isActiveInGame).ToList();
+        
+        foreach (var item in items)
+        {
+            var slot = Instantiate(itemSlotPrefab, itemSlotsContainer)
+                .GetComponent<ItemSlotView>();
+            
+            slot.Initialize(item.itemId, item);
+            itemSlots.Add(slot);
+        }
+    }
+    
+    public void RefreshAllSlots()
+    {
+        foreach (var slot in itemSlots)
+        {
+            slot.UpdateCount();
+        }
+    }
+}
+```
+
+#### 3.5.6 道具网络同步
+
+```csharp
+[Serializable]
+public class ItemUsedMessage
+{
+    public string playerId;
+    public string itemId;
+    public float timestamp;
+}
+
+[Serializable]
+public class ItemEffectActivatedMessage
+{
+    public string playerId;
+    public string itemId;
+    public float duration;
+    public Dictionary<string, object> parameters;
+}
+
+public class NetworkItemService
+{
+    public async UniTask SendItemUsedAsync(string itemId)
+    {
+        var data = new ItemUsedMessage
+        {
+            playerId = NetworkManager.Instance.PlayerId,
+            itemId = itemId,
+            timestamp = Time.time
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.ItemUsed,
+            senderId = NetworkManager.Instance.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await NetworkManager.Instance.SendMessageAsync(message);
+    }
+    
+    public async UniTask BroadcastItemEffectAsync(string playerId, string itemId, float duration, Dictionary<string, object> parameters)
+    {
+        var data = new ItemEffectActivatedMessage
+        {
+            playerId = playerId,
+            itemId = itemId,
+            duration = duration,
+            parameters = parameters
+        };
+        
+        var message = new NetworkMessage
+        {
+            type = MessageType.ItemEffectActivated,
+            senderId = NetworkManager.Instance.PlayerId,
+            timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            data = JsonUtility.ToJson(data)
+        };
+        
+        await NetworkManager.Instance.SendMessageAsync(message);
+    }
+}
+```
+
+### 3.6 网络系统设计
+
+#### 3.6.1 网络协议定义
 
 ```csharp
 public enum MessageType
@@ -252,6 +969,8 @@ public enum MessageType
     PlayerWin,
     PlayerListUpdate,
     GameStateSync,
+    ItemUsed,
+    ItemEffectActivated,
     Error
 }
 
@@ -332,7 +1051,7 @@ public class PlayerBoardState
 }
 ```
 
-#### 3.5.2 网络服务接口
+#### 3.6.2 网络服务接口
 
 ```csharp
 public interface INetworkService
@@ -355,7 +1074,7 @@ public interface INetworkService
 }
 ```
 
-#### 3.5.3 WebSocket网络服务实现
+#### 3.6.3 WebSocket网络服务实现
 
 ```csharp
 public class WebSocketNetworkService : INetworkService
@@ -500,7 +1219,7 @@ public class WebSocketNetworkService : INetworkService
 }
 ```
 
-#### 3.5.4 网络管理器
+#### 3.6.4 网络管理器
 
 ```csharp
 public class NetworkManager : MonoBehaviour
@@ -646,7 +1365,7 @@ public class NetworkManager : MonoBehaviour
 }
 ```
 
-#### 3.5.5 网络事件
+#### 3.6.5 网络事件
 
 ```csharp
 public static class NetworkEvents
@@ -865,9 +1584,9 @@ WebSocketServer接收
 
 ---
 
-## 4. 服务层设计
+## 5. 服务层设计
 
-### 4.1 动画服务
+### 5.1 动画服务
 
 ```csharp
 public interface IAnimationService
@@ -923,7 +1642,7 @@ public class DOTweenAnimationService : IAnimationService
 }
 ```
 
-### 4.2 音频服务
+### 5.2 音频服务
 
 ```csharp
 public interface IAudioService
@@ -968,7 +1687,7 @@ public class AudioService : IAudioService
 }
 ```
 
-### 4.3 配置服务
+### 5.3 配置服务
 
 ```csharp
 [CreateAssetMenu(fileName = "BingoGameConfig", menuName = "Bingo/Game Config")]
@@ -1001,9 +1720,9 @@ public class BingoGameConfig : ScriptableObject
 
 ---
 
-## 5. 事件系统设计
+## 6. 事件系统设计
 
-### 5.1 游戏事件
+### 6.1 游戏事件
 
 ```csharp
 public static class GameEvents
@@ -1022,7 +1741,7 @@ public static class GameEvents
 }
 ```
 
-### 5.2 UI事件
+### 6.2 UI事件
 
 ```csharp
 public static class UIEvents
@@ -1043,9 +1762,9 @@ public static class UIEvents
 
 ---
 
-## 6. 游戏流程设计
+## 7. 游戏流程设计
 
-### 6.1 游戏初始化流程
+### 7.1 游戏初始化流程
 
 ```
 1. 加载配置 (LoadConfig)
@@ -1074,7 +1793,7 @@ public static class UIEvents
 8. 切换到Ready状态 (ChangeState: Ready)
 ```
 
-### 6.2 游戏进行流程
+### 7.2 游戏进行流程
 
 ```
 1. 玩家点击开始 (StartGame)
@@ -1098,7 +1817,7 @@ public static class UIEvents
    j. 切换到Win状态 (ChangeState: Win)
 ```
 
-### 6.3 胜利检查流程
+### 7.3 胜利检查流程
 
 ```
 1. 切换到CheckingWin状态 (ChangeState: CheckingWin)
@@ -1120,7 +1839,7 @@ public static class UIEvents
 
 ---
 
-## 7. 扩展性设计
+## 8. 扩展性设计
 
 ### 7.1 自定义胜利条件
 
