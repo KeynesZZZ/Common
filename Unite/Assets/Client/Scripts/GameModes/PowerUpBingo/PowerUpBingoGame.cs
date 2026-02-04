@@ -4,6 +4,10 @@ using System.Threading.Tasks;
 
 namespace BingoClient.GameModes.PowerUpBingo
 {
+    /// <summary>
+    /// 道具 Bingo 游戏模式 - 在经典模式基础上增加道具系统
+    /// 棋盘上会随机生成道具格子，玩家点击后触发道具效果
+    /// </summary>
     public class PowerUpBingoGame : BaseGameMode
     {
         public override GameModeType ModeType => GameModeType.PowerUpBingo;

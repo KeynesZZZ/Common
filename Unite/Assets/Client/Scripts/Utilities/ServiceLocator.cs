@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace BingoClient.Utilities
 {
+    /// <summary>
+    /// 服务定位器 - 实现依赖注入模式
+    /// 提供全局服务注册和获取功能，避免组件间的直接依赖
+    /// </summary>
     public class ServiceLocator
     {
         private static ServiceLocator _instance;

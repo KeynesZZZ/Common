@@ -2,6 +2,9 @@ using BingoShared.Models;
 
 namespace BingoClient.Models
 {
+    /// <summary>
+    /// 游戏数据单例 - 存储游戏运行时的全局数据
+    /// </summary>
     public class GameData
     {
         public static GameData Instance { get; } = new();
@@ -13,6 +16,9 @@ namespace BingoClient.Models
         public System.Collections.Generic.List<PlayerData> Players { get; set; }
     }
 
+    /// <summary>
+    /// 房间数据 - 包含房间的基本信息和玩家列表
+    /// </summary>
     public class RoomData
     {
         public string Id { get; set; }
@@ -22,6 +28,9 @@ namespace BingoClient.Models
         public System.Collections.Generic.List<PlayerData> Players { get; set; }
     }
 
+    /// <summary>
+    /// 玩家数据 - 包含玩家的基本信息和游戏状态
+    /// </summary>
     public class PlayerData
     {
         public string Id { get; set; }
@@ -32,6 +41,9 @@ namespace BingoClient.Models
         public bool IsLocalPlayer { get; set; }
     }
 
+    /// <summary>
+    /// 棋盘数据 - 包含单个棋盘的所有格子信息
+    /// </summary>
     public class BoardData
     {
         public string Id { get; set; }
@@ -40,6 +52,9 @@ namespace BingoClient.Models
         public int BoardIndex { get; set; }
     }
 
+    /// <summary>
+    /// 格子数据 - 包含单个格子的数字和状态
+    /// </summary>
     public class SlotData
     {
         public int Index { get; set; }
@@ -49,12 +64,18 @@ namespace BingoClient.Models
         public PowerUpData PowerUp { get; set; }
     }
 
+    /// <summary>
+    /// 道具数据 - 包含道具类型和激活状态
+    /// </summary>
     public class PowerUpData
     {
         public PowerUpType Type { get; set; }
         public bool IsActive { get; set; }
     }
 
+    /// <summary>
+    /// 反馈数据 - 用于显示玩家的操作反馈
+    /// </summary>
     public class FeedbackData
     {
         public FeedbackType Type { get; set; }
@@ -62,6 +83,9 @@ namespace BingoClient.Models
         public string Message { get; set; }
     }
 
+    /// <summary>
+    /// 反馈类型 - 定义不同类型的操作反馈
+    /// </summary>
     public enum FeedbackType
     {
         Perfect,

@@ -5,6 +5,9 @@ using BingoClient.Models;
 
 namespace BingoClient.Controllers
 {
+    /// <summary>
+    /// 棋盘控制器 - 负责管理游戏棋盘的交互和状态
+    /// </summary>
     public class BoardController
     {
         private readonly NetworkService _networkService;
@@ -32,7 +35,6 @@ namespace BingoClient.Controllers
         public async Task ClickSlotAsync(int boardIndex, int slotIndex)
         {
             if (!_interactionEnabled) return;
-
             var response = await _networkService.SendClickAsync(boardIndex, slotIndex);
 
             _eventBus.Publish(new ClientEvents.SlotClicked
