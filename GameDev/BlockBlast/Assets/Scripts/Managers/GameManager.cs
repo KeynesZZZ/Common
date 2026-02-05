@@ -6,6 +6,9 @@ using UnityEngine;
 
 namespace BlockBlast.Managers
 {
+    /// <summary>
+    /// 游戏管理器 - 控制游戏流程和状态
+    /// </summary>
     public class GameManager : MonoBehaviour
     {
         public static GameManager Instance { get; private set; }
@@ -26,11 +29,11 @@ namespace BlockBlast.Managers
 
         public enum GameState
         {
-            Idle,
-            Dragging,
-            Placing,
-            Eliminating,
-            GameOver
+            Idle,       // 空闲状态
+            Dragging,  // 拖拽中
+            Placing,   // 放置中
+            Eliminating, // 消除中
+            GameOver    // 游戏结束
         }
 
         public GameState CurrentState => currentState;
@@ -53,6 +56,9 @@ namespace BlockBlast.Managers
             StartNewGame();
         }
 
+        /// <summary>
+        /// 开始新游戏
+        /// </summary>
         public void StartNewGame()
         {
             scoreManager.Reset();
@@ -65,6 +71,9 @@ namespace BlockBlast.Managers
             uiManager.ShowGameUI();
         }
 
+        /// <summary>
+        /// 生成新的三个方块
+        /// </summary>
         private void GenerateNewBlocks()
         {
             byte[] board = boardManager.GetBoardState();
@@ -78,6 +87,9 @@ namespace BlockBlast.Managers
             uiManager.UpdateBlockPreviews(availableBlocks, usedBlocks);
         }
 
+        /// <summary>
+        /// 方块拖拽开始
+        /// </summary>
         public void OnBlockDragStart(int blockIndex)
         {
             if (currentState != GameState.Idle || usedBlocks[blockIndex]) return;
@@ -85,6 +97,9 @@ namespace BlockBlast.Managers
             uiManager.ShowPlacementHint(availableBlocks[blockIndex]);
         }
 
+        /// <summary>
+        /// 方块拖拽结束
+        /// </summary>
         public void OnBlockDragEnd(int blockIndex, Vector2 screenPosition, bool placed)
         {
             currentState = GameState.Idle;
@@ -102,6 +117,9 @@ namespace BlockBlast.Managers
             }
         }
 
+        /// <summary>
+        /// 尝试放置方块
+        /// </summary>
         public bool TryPlaceBlock(BlockShape block, Vector2 screenPosition)
         {
             Vector2Int boardPos = ScreenToBoardPosition(screenPosition);
@@ -117,6 +135,9 @@ namespace BlockBlast.Managers
             return true;
         }
 
+        /// <summary>
+        /// 消除序列协程
+        /// </summary>
         private IEnumerator EliminationSequence()
         {
             currentState = GameState.Eliminating;
@@ -148,12 +169,18 @@ namespace BlockBlast.Managers
             }
         }
 
+        /// <summary>
+        /// 延迟生成新方块
+        /// </summary>
         private IEnumerator DelayedBlockGeneration()
         {
             yield return new WaitForSeconds(eliminationDelay + 0.2f);
             GenerateNewBlocks();
         }
 
+        /// <summary>
+        /// 检测游戏是否结束
+        /// </summary>
         private void CheckGameOver()
         {
             if (boardManager.IsGameOver(availableBlocks))
@@ -163,6 +190,9 @@ namespace BlockBlast.Managers
             }
         }
 
+        /// <summary>
+        /// 检测所有方块是否已使用
+        /// </summary>
         private bool AreAllBlocksUsed()
         {
             for (int i = 0; i < 3; i++)
@@ -172,6 +202,9 @@ namespace BlockBlast.Managers
             return true;
         }
 
+        /// <summary>
+        /// 屏幕坐标转换为棋盘坐标
+        /// </summary>
         private Vector2Int ScreenToBoardPosition(Vector2 screenPosition)
         {
             RectTransform boardRect = uiManager.GetBoardRectTransform();
@@ -191,6 +224,9 @@ namespace BlockBlast.Managers
             return new Vector2Int(x, y);
         }
 
+        /// <summary>
+        /// 重新开始游戏
+        /// </summary>
         public void RestartGame()
         {
             StartNewGame();

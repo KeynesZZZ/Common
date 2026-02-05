@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace BlockBlast.Managers
 {
+    /// <summary>
+    /// 棋盘管理器 - 管理棋盘状态、方块放置和消除逻辑
+    /// </summary>
     public class BoardManager : MonoBehaviour
     {
         public const int BOARD_SIZE = 8;
@@ -13,14 +16,27 @@ namespace BlockBlast.Managers
         private List<int> tempRowBuffer = new List<int>(BOARD_SIZE);
         private List<int> tempColBuffer = new List<int>(BOARD_SIZE);
 
+        /// <summary>
+        /// 当方块放置时触发
+        /// </summary>
         public System.Action<int, int> OnCellPlaced;
+
+        /// <summary>
+        /// 当行或列消除时触发
+        /// </summary>
         public System.Action<List<int>, List<int>> OnLinesEliminated;
 
+        /// <summary>
+        /// 清空棋盘
+        /// </summary>
         public void ClearBoard()
         {
             System.Array.Clear(board, 0, board.Length);
         }
 
+        /// <summary>
+        /// 检测方块是否可以放置在指定位置
+        /// </summary>
         public bool CanPlaceBlock(BlockShape block, int x, int y)
         {
             for (int by = 0; by < block.height; by++)
@@ -43,6 +59,9 @@ namespace BlockBlast.Managers
             return true;
         }
 
+        /// <summary>
+        /// 在指定位置放置方块
+        /// </summary>
         public void PlaceBlock(BlockShape block, int x, int y)
         {
             for (int by = 0; by < block.height; by++)
@@ -61,11 +80,15 @@ namespace BlockBlast.Managers
             }
         }
 
+        /// <summary>
+        /// 检测是否有完整的行或列可以消除
+        /// </summary>
         public EliminationResult CheckElimination()
         {
             tempRowBuffer.Clear();
             tempColBuffer.Clear();
 
+            // 检测完整的行
             for (int y = 0; y < BOARD_SIZE; y++)
             {
                 bool isRowFull = true;
@@ -80,6 +103,7 @@ namespace BlockBlast.Managers
                 if (isRowFull) tempRowBuffer.Add(y);
             }
 
+            // 检测完整的列
             for (int x = 0; x < BOARD_SIZE; x++)
             {
                 bool isColFull = true;
@@ -103,6 +127,9 @@ namespace BlockBlast.Managers
             return result;
         }
 
+        /// <summary>
+        /// 消除指定的行和列
+        /// </summary>
         public void Eliminate(EliminationResult result)
         {
             foreach (int row in result.rows)
@@ -124,6 +151,9 @@ namespace BlockBlast.Managers
             OnLinesEliminated?.Invoke(result.rows, result.columns);
         }
 
+        /// <summary>
+        /// 检测游戏是否结束（所有可用方块都无法放置）
+        /// </summary>
         public bool IsGameOver(BlockShape[] availableBlocks)
         {
             foreach (var block in availableBlocks)
@@ -135,6 +165,9 @@ namespace BlockBlast.Managers
             return true;
         }
 
+        /// <summary>
+        /// 检测方块是否可以放置在棋盘的任何位置
+        /// </summary>
         private bool CanPlaceBlockAnywhere(BlockShape block)
         {
             int maxY = BOARD_SIZE - block.height + 1;
@@ -151,6 +184,9 @@ namespace BlockBlast.Managers
             return false;
         }
 
+        /// <summary>
+        /// 获取棋盘空格率
+        /// </summary>
         public float GetEmptyRate()
         {
             int emptyCount = 0;
@@ -161,18 +197,27 @@ namespace BlockBlast.Managers
             return (float)emptyCount / TOTAL_CELLS;
         }
 
+        /// <summary>
+        /// 检测指定位置是否被占用
+        /// </summary>
         public bool IsCellOccupied(int x, int y)
         {
             if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return false;
             return board[y * BOARD_SIZE + x] == 1;
         }
 
+        /// <summary>
+        /// 获取棋盘状态的副本
+        /// </summary>
         public byte[] GetBoardState()
         {
             return (byte[])board.Clone();
         }
     }
 
+    /// <summary>
+    /// 消除结果结构
+    /// </summary>
     public class EliminationResult
     {
         public List<int> rows = new List<int>();
