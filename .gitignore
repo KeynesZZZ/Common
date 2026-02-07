@@ -101,3 +101,11 @@ InitTestScene*.unity*
 /SimpleJob/Assets/TutorialInfo
 /SimpleJob/Temp
 /SimpleJob/Assets/Plugins/UniTask
+
+/USimple/obj
+/USimple/Library
+/USimple/Assets/TutorialInfo
+/USimple/Temp
+
+
+
